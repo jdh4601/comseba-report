@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 
 import express from "express";
 
-import { PROVIDERS, completeWithCli } from "./lib/ai.mjs";
+import { PROVIDERS, complete as completeWithAi } from "./lib/ai.mjs";
 import { exampleReport } from "./lib/example.mjs";
 import { generateReport, regenerateSection } from "./lib/generate.mjs";
 import { DEFAULT_LEVEL, LEVELS } from "./lib/prompt.mjs";
@@ -21,7 +21,7 @@ import {
 } from "./lib/photos.mjs";
 import { convertToPdf, findSoffice, renderPreview } from "./lib/preview.mjs";
 import { CHIPS, COUNTS, LIMITS, SECTIONS } from "./lib/schema.mjs";
-import { createStore } from "./lib/store.mjs";
+import { KEY_FIELDS, createStore } from "./lib/store.mjs";
 import { buildDeck } from "./lib/template.mjs";
 import { validateReport } from "./lib/validate.mjs";
 
@@ -58,7 +58,17 @@ function sanitizeReport(report) {
 }
 
 /** 브라우저에는 API 키 자체 대신 등록 여부만 보낸다. */
-const publicSettings = ({ unsplashKey, ...rest }) => ({ ...rest, hasUnsplashKey: Boolean(unsplashKey || process.env.UNSPLASH_ACCESS_KEY) });
+function publicSettings(settings) {
+  const rest = Object.fromEntries(Object.entries(settings).filter(([field]) => !KEY_FIELDS.includes(field)));
+  return {
+    ...rest,
+    hasKeys: {
+      unsplash: Boolean(settings.unsplashKey || process.env.UNSPLASH_ACCESS_KEY),
+      anthropic: Boolean(settings.anthropicKey || process.env.ANTHROPIC_API_KEY),
+      openai: Boolean(settings.openaiKey || process.env.OPENAI_API_KEY),
+    },
+  };
+}
 
 async function unsplashKey() {
   return (await store.loadSettings()).unsplashKey || process.env.UNSPLASH_ACCESS_KEY || "";
@@ -66,7 +76,8 @@ async function unsplashKey() {
 
 async function completer() {
   const settings = await store.loadSettings();
-  return (prompt) => completeWithCli({ provider: settings.provider, model: settings.model, prompt });
+  const keys = { anthropic: settings.anthropicKey, openai: settings.openaiKey };
+  return (prompt) => completeWithAi({ provider: settings.provider, model: settings.model, prompt, keys });
 }
 
 async function savePhotoBuffer(buffer) {
@@ -158,7 +169,7 @@ app.get("/api/meta", route(async (_req, res) => {
 }));
 
 app.put("/api/settings", route(async (req, res) => {
-  if (!PROVIDERS[req.body?.provider]) throw badRequest("provider는 claude-cli 또는 codex-cli여야 합니다.");
+  if (!PROVIDERS[req.body?.provider]) throw badRequest(`provider는 ${Object.keys(PROVIDERS).join(", ")} 중 하나여야 합니다.`);
   res.json(publicSettings(await store.saveSettings(req.body)));
 }));
 

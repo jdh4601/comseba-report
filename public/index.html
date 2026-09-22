@@ -27,8 +27,17 @@
       <label>AI 연결
         <select id="provider"></select>
       </label>
-      <label>모델 <small>비워 두면 CLI 기본 모델 (예: sonnet, opus / gpt-5)</small>
-        <input id="model" placeholder="기본값">
+      <label id="modelSelectWrap">모델
+        <select id="modelSelect"></select>
+      </label>
+      <label id="modelInputWrap">모델 <small>비워 두면 기본 모델</small>
+        <input id="model">
+      </label>
+      <label id="anthropicKeyWrap" hidden>Anthropic API 키 <small>console.anthropic.com에서 발급 · 사용량만큼 과금</small>
+        <input id="anthropicKey" type="password" autocomplete="off">
+      </label>
+      <label id="openaiKeyWrap" hidden>OpenAI API 키 <small>platform.openai.com에서 발급 · 사용량만큼 과금</small>
+        <input id="openaiKey" type="password" autocomplete="off">
       </label>
       <label>Unsplash Access Key <small>없으면 Wikimedia 사진을 씁니다</small>
         <input id="unsplashKey" type="password" autocomplete="off">

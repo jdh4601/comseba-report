@@ -12,6 +12,7 @@
     "node": ">=20"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.127.0",
     "express": "^5.2.1",
     "jszip": "^3.10.2",
     "pptxgenjs": "^4.0.1",

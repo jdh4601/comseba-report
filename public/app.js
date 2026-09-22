@@ -345,9 +345,35 @@ async function loadSaved(id) {
   showReport(report, { id });
 }
 
-function showKeyState(hasKey) {
-  $("unsplashKey").value = "";
-  $("unsplashKey").placeholder = hasKey ? "등록됨 · 바꾸려면 새 키 입력" : "미등록";
+/** 입력칸 id ↔ 서버 hasKeys 이름. 키는 서버가 돌려주지 않으므로 등록 여부만 placeholder로 보여 준다. */
+const KEY_INPUTS = { unsplashKey: "unsplash", anthropicKey: "anthropic", openaiKey: "openai" };
+
+function showKeyStates(hasKeys = {}) {
+  for (const [inputId, name] of Object.entries(KEY_INPUTS)) {
+    $(inputId).value = "";
+    $(inputId).placeholder = hasKeys[name] ? "등록됨 · 바꾸려면 새 키 입력" : "미등록";
+  }
+}
+
+/** 고른 provider에 맞춰 모델 목록/입력칸과 필요한 API 키 칸만 보여 준다. */
+function renderProviderFields(model = "") {
+  const spec = state.meta.providers[$("provider").value];
+  const hasList = Boolean(spec.models);
+  $("modelSelectWrap").hidden = !hasList;
+  $("modelInputWrap").hidden = hasList;
+  if (hasList) {
+    $("modelSelect").replaceChildren(...spec.models.map((item) => el("option", { value: item.id, textContent: item.label })));
+    $("modelSelect").value = spec.models.some((item) => item.id === model) ? model : spec.defaultModel;
+  } else {
+    $("model").value = model && !Object.values(state.meta.providers).some((p) => p.models?.some((item) => item.id === model)) ? model : "";
+    $("model").placeholder = spec.defaultModel ? `기본값: ${spec.defaultModel}` : "CLI 기본 모델";
+  }
+  $("anthropicKeyWrap").hidden = spec.keyName !== "anthropic";
+  $("openaiKeyWrap").hidden = spec.keyName !== "openai";
+}
+
+function selectedModel() {
+  return state.meta.providers[$("provider").value].models ? $("modelSelect").value : $("model").value;
 }
 
 function setSettingsStatus(message, { error = false } = {}) {
@@ -360,8 +386,8 @@ function setSettingsStatus(message, { error = false } = {}) {
 function openSettings() {
   const { settings } = state.meta;
   $("provider").value = settings.provider;
-  $("model").value = settings.model;
-  showKeyState(settings.hasUnsplashKey);
+  renderProviderFields(settings.model);
+  showKeyStates(settings.hasKeys);
   setSettingsStatus("");
   $("settingsDialog").showModal();
 }
@@ -370,9 +396,13 @@ async function saveSettings() {
   try {
     state.meta.settings = await apiJson("/api/settings", {
       method: "PUT",
-      body: { provider: $("provider").value, model: $("model").value, unsplashKey: $("unsplashKey").value },
+      body: {
+        provider: $("provider").value,
+        model: selectedModel(),
+        ...Object.fromEntries(Object.keys(KEY_INPUTS).map((inputId) => [inputId, $(inputId).value])),
+      },
     });
-    showKeyState(state.meta.settings.hasUnsplashKey);
+    showKeyStates(state.meta.settings.hasKeys);
     setSettingsStatus("저장했습니다.");
   } catch (error) {
     setSettingsStatus(error.message, { error: true });
@@ -422,6 +452,7 @@ async function init() {
   refreshSaved();
 
   $("openSettings").addEventListener("click", openSettings);
+  $("provider").addEventListener("change", () => renderProviderFields(""));
   $("saveSettings").addEventListener("click", saveSettings);
   $("testConnection").addEventListener("click", testConnection);
   $("generate").addEventListener("click", generate);
