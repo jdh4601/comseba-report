@@ -9,22 +9,39 @@
 <body>
   <header class="topbar">
     <div class="brand">
-      <span class="kicker">COMSEBA AI·STEM TRIAL CLASS</span>
-      <h1>60분 융합 체험수업 보고서 생성기</h1>
+      <img src="/assets/logo.png" alt="COMSEBA 컴세바" class="logo">
+      <div>
+        <span class="kicker">COMSEBA AI·STEM TRIAL CLASS</span>
+        <h1>60분 융합 체험수업 보고서 생성기</h1>
+      </div>
     </div>
     <div class="topbar-tools">
-      <label>AI
-        <select id="provider"></select>
-      </label>
-      <label>모델
-        <input id="model" placeholder="기본값" size="10">
-      </label>
-      <button id="testConnection" class="ghost">연결 확인</button>
-      <label>불러오기
-        <select id="savedReports"><option value="">저장된 보고서</option></select>
-      </label>
+      <select id="savedReports" aria-label="저장된 보고서 불러오기"><option value="">저장된 보고서 불러오기</option></select>
+      <button id="openSettings" class="ghost" type="button">⚙ 설정</button>
     </div>
   </header>
+
+  <dialog id="settingsDialog" class="settings">
+    <form method="dialog">
+      <h2>설정</h2>
+      <label>AI 연결
+        <select id="provider"></select>
+      </label>
+      <label>모델 <small>비워 두면 CLI 기본 모델 (예: sonnet, opus / gpt-5)</small>
+        <input id="model" placeholder="기본값">
+      </label>
+      <label>Unsplash Access Key <small>없으면 Wikimedia 사진을 씁니다</small>
+        <input id="unsplashKey" type="password" autocomplete="off">
+      </label>
+      <p id="settingsStatus" class="status" hidden></p>
+      <div class="dialog-actions">
+        <button id="testConnection" class="ghost" type="button">AI 연결 확인</button>
+        <span class="spacer"></span>
+        <button value="cancel" class="ghost">닫기</button>
+        <button id="saveSettings" class="primary" type="button">저장</button>
+      </div>
+    </form>
+  </dialog>
 
   <main class="layout">
     <section class="panel input-panel">
@@ -35,6 +52,9 @@
         <label>학년<input id="studentGrade" placeholder="2학년"></label>
         <label>수업 날짜<input id="studentDate"></label>
       </div>
+
+      <h3>난이도 <small>3p 진로탐구활동의 수학 수준</small></h3>
+      <div class="segmented" id="levelButtons"></div>
 
       <h3>MAIN 분야 <small>핵심 관심 분야</small></h3>
       <div class="chips" id="mainChips"></div>
@@ -64,6 +84,7 @@
           <span id="savedLabel" class="muted"></span>
           <button id="preview" class="ghost">미리보기</button>
           <button id="save" class="ghost">저장</button>
+          <button id="print" class="ghost">인쇄</button>
           <button id="download" class="primary">PPTX 다운로드</button>
         </div>
         <div id="warnings" class="warnings" hidden></div>

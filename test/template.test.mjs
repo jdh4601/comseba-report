@@ -38,3 +38,11 @@ test("buildDeck_mainOutsideChipList_showsItAsMainChip", async () => {
   const slides = await slideXml(await buildDeck(report, { rootDir }));
   assert.match(slides[1], /드론/);
 });
+
+test("buildDeck_unsplashPhotos_creditsWithoutCommonsSuffix", async () => {
+  const report = structuredClone(exampleReport);
+  report.photos = report.photos.map((photo) => ({ ...photo, source: "unsplash", credit: "Jane Doe on Unsplash" }));
+  const slides = await slideXml(await buildDeck(report, { rootDir }));
+  assert.match(slides[2], /Photos: Jane Doe on Unsplash \/ Jane Doe on Unsplash/);
+  assert.doesNotMatch(slides[2], /Wikimedia/);
+});

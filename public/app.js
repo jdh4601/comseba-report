@@ -1,6 +1,6 @@
 const $ = (id) => document.getElementById(id);
 
-const state = { meta: null, report: null, main: "", sub: "" };
+const state = { meta: null, report: null, main: "", sub: "", level: "중등" };
 
 function el(tag, props = {}, children = []) {
   const node = Object.assign(document.createElement(tag), props);
@@ -89,10 +89,24 @@ function renderChips() {
   }
 }
 
+function renderLevels() {
+  $("levelButtons").replaceChildren(
+    ...state.meta.levels.map((level) => {
+      const button = el("button", { type: "button", textContent: level, className: level === state.level ? "active" : "" });
+      button.addEventListener("click", () => {
+        state.level = level;
+        renderLevels();
+      });
+      return button;
+    }),
+  );
+}
+
 function collectInput() {
   const main = $("mainCustom").value.trim() || state.main;
   const sub = $("subCustom").value.trim() || state.sub;
   return {
+    level: state.level,
     student: {
       name: $("studentName").value.trim() || "[ 학생명 ]",
       school: $("studentSchool").value.trim() || "[ 학교 ]",
@@ -111,6 +125,8 @@ function fillInput(report) {
   $("studentSchool").value = blankIfPlaceholder(report.student?.school);
   $("studentGrade").value = blankIfPlaceholder(report.student?.grade);
   $("studentDate").value = report.student?.date ?? today();
+  state.level = state.meta.levels.includes(report.level) ? report.level : state.meta.defaultLevel;
+  renderLevels();
   for (const kind of ["main", "sub"]) {
     const value = report.interest?.[kind] ?? "";
     const inList = state.meta.chips.includes(value);
@@ -125,7 +141,7 @@ function fillInput(report) {
 /** 결과를 수정한 뒤에도 왼쪽의 학생 정보·분야 변경이 반영되도록, 내보내기 직전에 합친다. */
 function currentReport() {
   const input = collectInput();
-  return { ...state.report, student: input.student, interest: input.interest, memo: input.memo };
+  return { ...state.report, level: input.level, student: input.student, interest: input.interest, memo: input.memo };
 }
 
 // ---------- 결과 섹션 ----------
@@ -181,7 +197,7 @@ function photoCard(index) {
     candidates.replaceChildren(
       ...(data.results.length ? data.results.slice(0, 9) : []).map((item) => {
         const button = el("button", { type: "button", title: `${item.title}\n${item.credit}` });
-        button.style.backgroundImage = `url("${item.imageUrl}")`;
+        button.style.backgroundImage = `url("${item.thumbUrl ?? item.imageUrl}")`;
         button.addEventListener("click", async () => {
           const picked = await busy(button, "사진 저장 중", () => apiJson("/api/photos/pick", { method: "POST", body: item }));
           if (picked) applyPhoto(picked);
@@ -317,7 +333,7 @@ async function save() {
 async function refreshSaved() {
   const { reports } = await apiJson("/api/reports");
   $("savedReports").replaceChildren(
-    el("option", { value: "", textContent: "저장된 보고서" }),
+    el("option", { value: "", textContent: "저장된 보고서 불러오기" }),
     ...reports.map((item) => el("option", { value: item.id, textContent: `${item.date} ${item.name} (${item.main})` })),
   );
 }
@@ -329,27 +345,88 @@ async function loadSaved(id) {
   showReport(report, { id });
 }
 
+function showKeyState(hasKey) {
+  $("unsplashKey").value = "";
+  $("unsplashKey").placeholder = hasKey ? "등록됨 · 바꾸려면 새 키 입력" : "미등록";
+}
+
+function setSettingsStatus(message, { error = false } = {}) {
+  const status = $("settingsStatus");
+  status.hidden = !message;
+  status.textContent = message ?? "";
+  status.classList.toggle("error", error);
+}
+
+function openSettings() {
+  const { settings } = state.meta;
+  $("provider").value = settings.provider;
+  $("model").value = settings.model;
+  showKeyState(settings.hasUnsplashKey);
+  setSettingsStatus("");
+  $("settingsDialog").showModal();
+}
+
 async function saveSettings() {
-  await apiJson("/api/settings", { method: "PUT", body: { provider: $("provider").value, model: $("model").value } });
+  try {
+    state.meta.settings = await apiJson("/api/settings", {
+      method: "PUT",
+      body: { provider: $("provider").value, model: $("model").value, unsplashKey: $("unsplashKey").value },
+    });
+    showKeyState(state.meta.settings.hasUnsplashKey);
+    setSettingsStatus("저장했습니다.");
+  } catch (error) {
+    setSettingsStatus(error.message, { error: true });
+  }
+}
+
+async function testConnection() {
+  await saveSettings();
+  const button = $("testConnection");
+  button.disabled = true;
+  setSettingsStatus("AI 연결 확인 중…");
+  try {
+    const data = await apiJson("/api/test-connection", { method: "POST" });
+    setSettingsStatus(`연결 성공 (${data.seconds}초): ${data.reply}`);
+  } catch (error) {
+    setSettingsStatus(error.message, { error: true });
+  } finally {
+    button.disabled = false;
+  }
+}
+
+/** 서버에서 만든 PDF를 숨은 iframe에 띄워 브라우저 인쇄 창을 연다. 막히면 새 탭으로 연다. */
+async function printReport() {
+  const response = await busy($("print"), "인쇄용 PDF 만드는 중…", () => api("/api/pdf", { method: "POST", body: { report: currentReport() } }));
+  if (!response) return;
+  const url = URL.createObjectURL(await response.blob());
+  document.querySelector(".print-frame")?.remove();
+  const frame = el("iframe", { className: "print-frame", src: url });
+  frame.addEventListener("load", () => {
+    try {
+      frame.contentWindow.focus();
+      frame.contentWindow.print();
+    } catch {
+      window.open(url, "_blank");
+    }
+  });
+  document.body.append(frame);
 }
 
 async function init() {
   state.meta = await apiJson("/api/meta");
   $("provider").replaceChildren(...Object.entries(state.meta.providers).map(([value, p]) => el("option", { value, textContent: p.label })));
-  $("provider").value = state.meta.settings.provider;
-  $("model").value = state.meta.settings.model;
   $("studentDate").value = today();
+  state.level = state.meta.defaultLevel;
+  renderLevels();
   renderChips();
   refreshSaved();
 
-  $("provider").addEventListener("change", saveSettings);
-  $("model").addEventListener("change", saveSettings);
-  $("testConnection").addEventListener("click", async () => {
-    const data = await busy($("testConnection"), "연결 확인 중…", () => apiJson("/api/test-connection", { method: "POST" }));
-    if (data) setStatus(`연결 성공 (${data.seconds}초): ${data.reply}`);
-  });
+  $("openSettings").addEventListener("click", openSettings);
+  $("saveSettings").addEventListener("click", saveSettings);
+  $("testConnection").addEventListener("click", testConnection);
   $("generate").addEventListener("click", generate);
   $("preview").addEventListener("click", preview);
+  $("print").addEventListener("click", printReport);
   $("download").addEventListener("click", download);
   $("save").addEventListener("click", save);
   $("savedReports").addEventListener("change", (event) => loadSaved(event.target.value));
@@ -357,7 +434,10 @@ async function init() {
     fillInput(state.meta.example);
     showReport(structuredClone(state.meta.example));
   });
-  if (!state.meta.previewAvailable) $("preview").title = "LibreOffice가 없어 미리보기를 쓸 수 없습니다.";
+  if (!state.meta.previewAvailable) {
+    $("preview").title = "LibreOffice가 없어 미리보기를 쓸 수 없습니다.";
+    $("print").title = "LibreOffice가 없어 인쇄용 PDF를 만들 수 없습니다.";
+  }
 }
 
 init().catch((error) => setStatus(`초기화 실패: ${error.message}`, { error: true }));
