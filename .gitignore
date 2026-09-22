@@ -1,0 +1,5 @@
+node_modules/
+data/students/
+data/photos/
+data/settings.json
+.DS_Store

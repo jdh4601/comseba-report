@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>컴세바 체험수업 보고서 생성기</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="kicker">COMSEBA AI·STEM TRIAL CLASS</span>
+      <h1>60분 융합 체험수업 보고서 생성기</h1>
+    </div>
+    <div class="topbar-tools">
+      <label>AI
+        <select id="provider"></select>
+      </label>
+      <label>모델
+        <input id="model" placeholder="기본값" size="10">
+      </label>
+      <button id="testConnection" class="ghost">연결 확인</button>
+      <label>불러오기
+        <select id="savedReports"><option value="">저장된 보고서</option></select>
+      </label>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="panel input-panel">
+      <h2>학생 정보 입력</h2>
+      <div class="grid2">
+        <label>학생명<input id="studentName" placeholder="홍길동"></label>
+        <label>학교<input id="studentSchool" placeholder="○○중학교"></label>
+        <label>학년<input id="studentGrade" placeholder="2학년"></label>
+        <label>수업 날짜<input id="studentDate"></label>
+      </div>
+
+      <h3>MAIN 분야 <small>핵심 관심 분야</small></h3>
+      <div class="chips" id="mainChips"></div>
+      <input id="mainCustom" class="custom-field" placeholder="목록에 없으면 직접 입력 (예: 드론)">
+
+      <h3>SUB 분야 <small>함께 쓰는 분야</small></h3>
+      <div class="chips" id="subChips"></div>
+      <input id="subCustom" class="custom-field" placeholder="목록에 없으면 직접 입력">
+
+      <h3>해결하고 싶은 문제 <small>학생이 한 말 그대로</small></h3>
+      <input id="problemQuote" placeholder="예: 급식 시간마다 버려지는 음식이 너무 많아요.">
+
+      <h3>강사 메모 <small>선택 · 많이 적을수록 맞춤형</small></h3>
+      <textarea id="memo" rows="4" placeholder="학생이 언급한 기술, 경험, 수업 중 관찰한 점 등"></textarea>
+
+      <button id="generate" class="primary">보고서 생성</button>
+      <p id="status" class="status" hidden></p>
+      <button id="loadExample" class="link">급식 잔반 예시 채우기</button>
+    </section>
+
+    <section class="panel result-panel">
+      <div id="empty" class="empty">
+        <p>왼쪽에 정보를 입력하고 <b>보고서 생성</b>을 누르면<br>2·3페이지 내용과 사진이 한 번에 채워집니다.</p>
+      </div>
+      <div id="result" hidden>
+        <div class="toolbar">
+          <span id="savedLabel" class="muted"></span>
+          <button id="preview" class="ghost">미리보기</button>
+          <button id="save" class="ghost">저장</button>
+          <button id="download" class="primary">PPTX 다운로드</button>
+        </div>
+        <div id="warnings" class="warnings" hidden></div>
+        <div id="sections"></div>
+        <div id="previewBox" class="preview" hidden></div>
+      </div>
+    </section>
+  </main>
+
+  <script src="app.js" type="module"></script>
+</body>
+</html>
