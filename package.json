@@ -13,6 +13,8 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.127.0",
+    "@vercel/blob": "^2.8.0",
+    "@vercel/functions": "^3.9.9",
     "express": "^5.2.1",
     "jszip": "^3.10.2",
     "pptxgenjs": "^4.0.1",

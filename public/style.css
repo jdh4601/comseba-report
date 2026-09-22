@@ -93,7 +93,18 @@ button:disabled { opacity: .5; cursor: progress; }
 .credit { font-size: 11px; color: var(--gray); }
 
 .preview { display: grid; gap: 12px; margin-top: 8px; }
-.preview img { width: 100%; border: 1px solid var(--line); }
+.preview .slide-frame { border: 1px solid var(--line); background: #fff; }
+
+/* 인쇄: 슬라이드 3장만 실제 크기로 한 장씩 찍는다. */
+#printArea { display: none; }
+@page { size: 13.333in 7.5in; margin: 0; }
+@media print {
+  body { background: #fff; }
+  body > *:not(#printArea) { display: none !important; }
+  #printArea { display: block; }
+  #printArea .slide { break-after: page; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  #printArea .slide:last-child { break-after: auto; }
+}
 
 .settings { border: 1px solid var(--line); padding: 0; width: min(460px, 92vw); }
 .settings::backdrop { background: rgba(0, 0, 0, .35); }
@@ -102,4 +113,3 @@ button:disabled { opacity: .5; cursor: progress; }
 .settings label small { color: var(--gray); font-weight: 400; }
 .dialog-actions { display: flex; gap: 8px; align-items: center; }
 .dialog-actions .spacer { flex: 1; }
-.print-frame { position: fixed; width: 0; height: 0; border: 0; visibility: hidden; }

@@ -1,14 +1,13 @@
-import { randomUUID } from "node:crypto";
-import { mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import express from "express";
 
 import { PROVIDERS, complete as completeWithAi } from "./lib/ai.mjs";
+import { checkBasicAuth } from "./lib/auth.mjs";
+import { EMBEDDED_ASSETS } from "./lib/embedded-assets.mjs";
 import { exampleReport } from "./lib/example.mjs";
 import { generateReport, regenerateSection } from "./lib/generate.mjs";
-import { DEFAULT_LEVEL, LEVELS } from "./lib/prompt.mjs";
 import {
   buildPhotoPickPrompt,
   cropPhoto,
@@ -19,23 +18,32 @@ import {
   shorterQuery,
   trackUnsplashDownload,
 } from "./lib/photos.mjs";
-import { convertToPdf, findSoffice, renderPreview } from "./lib/preview.mjs";
+import { DEFAULT_LEVEL, LEVELS } from "./lib/prompt.mjs";
 import { CHIPS, COUNTS, LIMITS, SECTIONS } from "./lib/schema.mjs";
-import { KEY_FIELDS, createStore } from "./lib/store.mjs";
+import { KEY_FIELDS, createBlobStore, createFileStore } from "./lib/store.mjs";
 import { buildDeck } from "./lib/template.mjs";
 import { validateReport } from "./lib/validate.mjs";
 
 const rootDir = dirname(fileURLToPath(import.meta.url));
-const photoDir = join(rootDir, "data", "photos");
-const store = createStore(join(rootDir, "data"));
-const PORT = Number(process.env.PORT ?? 4180);
-const HOST = "127.0.0.1";
+
+/**
+ * Vercel에서는 CLI·로컬 파일을 쓸 수 없으므로 API provider와 Blob 저장소만 쓴다.
+ * API 키는 Vercel 환경변수(ANTHROPIC_API_KEY 등)로만 받는다.
+ */
+const IS_HOSTED = Boolean(process.env.VERCEL);
+const store = IS_HOSTED ? createBlobStore() : createFileStore(join(rootDir, "data"));
+const AVAILABLE_PROVIDERS = Object.fromEntries(Object.entries(PROVIDERS).filter(([, spec]) => !IS_HOSTED || spec.kind === "api"));
+const AUTH = { user: process.env.DASHBOARD_USER || "comseba", password: process.env.DASHBOARD_PASSWORD || "" };
 
 const app = express();
-app.use(express.json({ limit: "25mb" }));
+// Vercel 함수의 요청 본문 한도(4.5MB)보다 작게 잡고, 큰 사진은 브라우저에서 줄여서 올린다.
+app.use(express.json({ limit: "4mb" }));
+
+app.use((req, res, next) => {
+  if (checkBasicAuth(req.headers.authorization, AUTH)) return next();
+  res.set("WWW-Authenticate", 'Basic realm="Comseba Report", charset="UTF-8"').status(401).send("인증이 필요합니다.");
+});
 app.use(express.static(join(rootDir, "public")));
-app.use("/data/photos", express.static(photoDir));
-app.use("/assets", express.static(join(rootDir, "assets")));
 
 /** 비동기 핸들러의 오류를 한곳에서 JSON으로 돌려준다. */
 const route = (handler) => async (req, res) => {
@@ -49,7 +57,7 @@ const route = (handler) => async (req, res) => {
 
 const badRequest = (message) => Object.assign(new Error(message), { status: 400 });
 
-/** 브라우저에서 넘어온 보고서의 사진 경로가 프로젝트 사진 폴더를 벗어나면 비운다. */
+/** 브라우저에서 넘어온 보고서의 사진 경로가 사진 저장소를 벗어나면 비운다. */
 function sanitizeReport(report) {
   if (!report || typeof report !== "object") throw badRequest("보고서 데이터가 없습니다.");
   const next = structuredClone(report);
@@ -57,11 +65,17 @@ function sanitizeReport(report) {
   return next;
 }
 
+async function loadImage(ref) {
+  const embedded = EMBEDDED_ASSETS[ref];
+  return embedded ? Buffer.from(embedded.base64, "base64") : store.readPhoto(ref);
+}
+
 /** 브라우저에는 API 키 자체 대신 등록 여부만 보낸다. */
 function publicSettings(settings) {
   const rest = Object.fromEntries(Object.entries(settings).filter(([field]) => !KEY_FIELDS.includes(field)));
   return {
     ...rest,
+    provider: AVAILABLE_PROVIDERS[settings.provider] ? settings.provider : Object.keys(AVAILABLE_PROVIDERS)[0],
     hasKeys: {
       unsplash: Boolean(settings.unsplashKey || process.env.UNSPLASH_ACCESS_KEY),
       anthropic: Boolean(settings.anthropicKey || process.env.ANTHROPIC_API_KEY),
@@ -76,23 +90,17 @@ async function unsplashKey() {
 
 async function completer() {
   const settings = await store.loadSettings();
+  const { provider } = publicSettings(settings);
   const keys = { anthropic: settings.anthropicKey, openai: settings.openaiKey };
-  return (prompt) => completeWithAi({ provider: settings.provider, model: settings.model, prompt, keys });
-}
-
-async function savePhotoBuffer(buffer) {
-  await mkdir(photoDir, { recursive: true });
-  const file = `data/photos/${randomUUID()}.jpg`;
-  await cropPhoto(buffer, join(rootDir, file));
-  return file;
+  return (prompt) => completeWithAi({ provider, model: settings.model, prompt, keys });
 }
 
 /** 고른 후보를 내려받아 2:1로 저장한다. Unsplash 사진은 약관에 따라 다운로드 이벤트도 보낸다. */
 async function savePickedPhoto(candidate, key) {
-  const file = await savePhotoBuffer(await downloadImage(String(candidate.imageUrl ?? "")));
+  const file = await store.savePhoto(await cropPhoto(await downloadImage(String(candidate.imageUrl ?? ""))));
   const source = candidate.source === "unsplash" ? "unsplash" : "wikimedia";
   if (source === "unsplash") {
-    trackUnsplashDownload(candidate.downloadLocation, { accessKey: key }).catch((error) => console.error("[unsplash download 추적 실패]", error.message));
+    await trackUnsplashDownload(candidate.downloadLocation, { accessKey: key }).catch((error) => console.error("[unsplash download 추적 실패]", error.message));
   }
   return { file, credit: String(candidate.credit ?? ""), source };
 }
@@ -155,21 +163,22 @@ async function autoPickPhotos(report, complete) {
 
 app.get("/api/meta", route(async (_req, res) => {
   res.json({
+    hosted: IS_HOSTED,
     chips: CHIPS,
     levels: LEVELS,
     defaultLevel: DEFAULT_LEVEL,
     limits: LIMITS,
     counts: COUNTS,
     sections: SECTIONS,
-    providers: PROVIDERS,
+    providers: AVAILABLE_PROVIDERS,
+    keysWritable: store.keysWritable,
     settings: publicSettings(await store.loadSettings()),
     example: exampleReport,
-    previewAvailable: Boolean(findSoffice()),
   });
 }));
 
 app.put("/api/settings", route(async (req, res) => {
-  if (!PROVIDERS[req.body?.provider]) throw badRequest(`provider는 ${Object.keys(PROVIDERS).join(", ")} 중 하나여야 합니다.`);
+  if (!AVAILABLE_PROVIDERS[req.body?.provider]) throw badRequest(`provider는 ${Object.keys(AVAILABLE_PROVIDERS).join(", ")} 중 하나여야 합니다.`);
   res.json(publicSettings(await store.saveSettings(req.body)));
 }));
 
@@ -202,6 +211,15 @@ app.post("/api/validate", route(async (req, res) => {
   res.json(validateReport(sanitizeReport(req.body?.report)));
 }));
 
+app.get("/api/photo", route(async (req, res) => {
+  const ref = String(req.query.ref ?? "");
+  if (!isSafePhotoPath(ref)) throw badRequest("잘못된 사진 경로입니다.");
+  const buffer = await loadImage(ref);
+  if (!buffer) return res.status(404).json({ error: "사진을 찾지 못했습니다." });
+  res.set({ "Content-Type": ref.endsWith(".png") ? "image/png" : "image/jpeg", "Cache-Control": "private, max-age=31536000, immutable" });
+  return res.send(buffer);
+}));
+
 app.get("/api/photos/search", route(async (req, res) => {
   const query = String(req.query.q ?? "").trim();
   if (!query) throw badRequest("검색어를 입력해 주세요.");
@@ -213,26 +231,15 @@ app.post("/api/photos/pick", route(async (req, res) => {
 }));
 
 app.post("/api/photos/upload", route(async (req, res) => {
-  const match = /^data:image\/(png|jpe?g|webp|heic);base64,(.+)$/.exec(String(req.body?.dataUrl ?? ""));
+  const match = /^data:image\/(png|jpe?g|webp);base64,(.+)$/.exec(String(req.body?.dataUrl ?? ""));
   if (!match) throw badRequest("PNG·JPG·WEBP 이미지만 올릴 수 있습니다.");
-  const file = await savePhotoBuffer(Buffer.from(match[2], "base64"));
+  const file = await store.savePhoto(await cropPhoto(Buffer.from(match[2], "base64")));
   res.json({ file, credit: "", source: "upload" });
-}));
-
-app.post("/api/preview", route(async (req, res) => {
-  const buffer = await buildDeck(sanitizeReport(req.body?.report), { rootDir });
-  res.json({ images: await renderPreview(buffer) });
-}));
-
-app.post("/api/pdf", route(async (req, res) => {
-  const pdf = await convertToPdf(await buildDeck(sanitizeReport(req.body?.report), { rootDir }));
-  res.setHeader("Content-Type", "application/pdf");
-  res.send(pdf);
 }));
 
 app.post("/api/pptx", route(async (req, res) => {
   const report = sanitizeReport(req.body?.report);
-  const buffer = await buildDeck(report, { rootDir });
+  const buffer = await buildDeck(report, { loadImage });
   const name = String(report.student?.name ?? "학생").replace(/[^\w가-힣]/g, "") || "학생";
   const filename = `컴세바_60분융합체험수업_${name}.pptx`;
   res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.presentationml.presentation");
@@ -252,6 +259,9 @@ app.post("/api/reports", route(async (req, res) => {
   res.json({ id: await store.saveReport(sanitizeReport(req.body?.report)) });
 }));
 
-app.listen(PORT, HOST, () => {
-  console.log(`컴세바 보고서 대시보드: http://${HOST}:${PORT}`);
-});
+export default app;
+
+if (!IS_HOSTED) {
+  const port = Number(process.env.PORT ?? 4180);
+  app.listen(port, "127.0.0.1", () => console.log(`컴세바 보고서 대시보드: http://127.0.0.1:${port}`));
+}

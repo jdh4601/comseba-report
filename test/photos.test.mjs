@@ -1,7 +1,4 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { test } from "node:test";
 
 import sharp from "sharp";
@@ -46,22 +43,16 @@ test("searchCommons_mixedLicenses_keepsOnlyReusableBitmaps", async () => {
   assert.ok(requested[0].init.headers["User-Agent"]);
 });
 
-test("cropPhoto_anyImage_writesTwoToOneJpeg", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "photos-test-"));
-  try {
-    const input = await sharp({ create: { width: 800, height: 800, channels: 3, background: "#888" } }).png().toBuffer();
-    const out = join(dir, "x.jpg");
-    await cropPhoto(input, out);
-    const meta = await sharp(out).metadata();
-    assert.equal(meta.format, "jpeg");
-    assert.equal(meta.width / meta.height, 2);
-  } finally {
-    await rm(dir, { recursive: true, force: true });
-  }
+test("cropPhoto_anyImage_returnsTwoToOneJpeg", async () => {
+  const input = await sharp({ create: { width: 800, height: 800, channels: 3, background: "#888" } }).png().toBuffer();
+  const meta = await sharp(await cropPhoto(input)).metadata();
+  assert.equal(meta.format, "jpeg");
+  assert.equal(meta.width / meta.height, 2);
 });
 
 test("isSafePhotoPath_onlyAllowsAssetAndPhotoFolders", () => {
   assert.equal(isSafePhotoPath("data/photos/abc-123.jpg"), true);
+  assert.equal(isSafePhotoPath("photos/abc-123.jpg"), true);
   assert.equal(isSafePhotoPath("assets/photo_lunch.jpg"), true);
   assert.equal(isSafePhotoPath("../secret.jpg"), false);
   assert.equal(isSafePhotoPath("/etc/passwd"), false);

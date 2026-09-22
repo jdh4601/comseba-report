@@ -1,6 +1,12 @@
+import { renderReportSlides, scaledSlide, whenImagesLoaded } from "./slides.mjs";
+
 const $ = (id) => document.getElementById(id);
 
 const state = { meta: null, report: null, main: "", sub: "", level: "중등" };
+
+/** 사진은 로컬 파일·Blob 저장소 어디에 있든 서버의 /api/photo를 거쳐 받는다. */
+const photoUrl = (ref) => `/api/photo?ref=${encodeURIComponent(ref)}`;
+const LOGO_URL = photoUrl("assets/logo.png");
 
 function el(tag, props = {}, children = []) {
   const node = Object.assign(document.createElement(tag), props);
@@ -179,7 +185,7 @@ function sectionCard(key, children) {
 function photoCard(index) {
   const photo = state.report.photos[index];
   const frame = el("div", { className: "photo-frame", textContent: photo.file ? "" : "사진 없음" });
-  if (photo.file) frame.style.backgroundImage = `url("/${photo.file}")`;
+  if (photo.file) frame.style.backgroundImage = `url("${photoUrl(photo.file)}")`;
   const query = el("input", { type: "text", value: photo.query ?? "", placeholder: "영어 검색어" });
   const search = el("button", { className: "ghost small", textContent: "사진 검색", type: "button" });
   const upload = el("input", { type: "file", accept: "image/*", hidden: true });
@@ -189,6 +195,7 @@ function photoCard(index) {
   const applyPhoto = ({ file, credit, source }) => {
     Object.assign(state.report.photos[index], { file, credit, source });
     renderSections();
+    refreshPreviewSoon();
   };
   search.addEventListener("click", async () => {
     state.report.photos[index].query = query.value;
@@ -211,12 +218,10 @@ function photoCard(index) {
   upload.addEventListener("change", () => {
     const [file] = upload.files;
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = async () => {
-      const saved = await busy(uploadButton, "사진 올리는 중", () => apiJson("/api/photos/upload", { method: "POST", body: { dataUrl: reader.result } }));
-      if (saved) applyPhoto(saved);
-    };
-    reader.readAsDataURL(file);
+    busy(uploadButton, "사진 올리는 중", async () => {
+      const dataUrl = await shrinkImage(file);
+      applyPhoto(await apiJson("/api/photos/upload", { method: "POST", body: { dataUrl } }));
+    });
   });
 
   const credit = el("input", { value: photo.credit ?? "", placeholder: "출처 (직접 올린 사진은 비워도 됨)" });
@@ -277,7 +282,7 @@ function showReport(report, { id, warnings = [] } = {}) {
   state.report = report;
   $("empty").hidden = true;
   $("result").hidden = false;
-  $("previewBox").hidden = true;
+  refreshPreviewSoon();
   $("savedLabel").textContent = id ? `저장됨: ${id}` : "";
   showWarnings(warnings);
   renderSections();
@@ -303,13 +308,41 @@ async function regenerate(section) {
   showReport(data.report, { warnings: data.warnings });
 }
 
-async function preview() {
-  const data = await busy($("preview"), "미리보기 만드는 중…", () => apiJson("/api/preview", { method: "POST", body: { report: currentReport() } }));
-  if (!data) return;
+/** 휴대폰 사진은 수 MB라 서버 요청 한도를 넘을 수 있어, 긴 변 1800px JPEG로 줄여서 올린다. */
+async function shrinkImage(file, maxSide = 1800) {
+  const bitmap = await createImageBitmap(file);
+  const scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
+  const canvas = el("canvas", { width: Math.round(bitmap.width * scale), height: Math.round(bitmap.height * scale) });
+  canvas.getContext("2d").drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL("image/jpeg", 0.88);
+}
+
+function reportSlides() {
+  return renderReportSlides(currentReport(), { photoUrl, logoUrl: LOGO_URL });
+}
+
+/** 미리보기는 브라우저에서 바로 그리므로, 열려 있는 동안에는 입력할 때마다 다시 그린다. */
+function renderPreview() {
+  const box = $("previewBox");
+  const width = box.clientWidth || 800;
+  box.replaceChildren(
+    el("div", { className: "sub-title", textContent: "미리보기 (PowerPoint와 줄바꿈 위치가 조금 다를 수 있습니다)" }),
+    ...reportSlides().map((slide) => scaledSlide(slide, width)),
+  );
+}
+
+function preview() {
   const box = $("previewBox");
   box.hidden = false;
-  box.replaceChildren(el("div", { className: "sub-title", textContent: "미리보기 (LibreOffice 렌더링이라 문장부호 앞 공백 등 PowerPoint와 조금 다를 수 있습니다)" }), ...data.images.map((src) => el("img", { src })));
+  renderPreview();
   box.scrollIntoView({ behavior: "smooth" });
+}
+
+let previewTimer = null;
+function refreshPreviewSoon() {
+  if ($("previewBox").hidden) return;
+  clearTimeout(previewTimer);
+  previewTimer = setTimeout(renderPreview, 300);
 }
 
 async function download() {
@@ -349,9 +382,12 @@ async function loadSaved(id) {
 const KEY_INPUTS = { unsplashKey: "unsplash", anthropicKey: "anthropic", openaiKey: "openai" };
 
 function showKeyStates(hasKeys = {}) {
+  const writable = state.meta.keysWritable;
   for (const [inputId, name] of Object.entries(KEY_INPUTS)) {
     $(inputId).value = "";
-    $(inputId).placeholder = hasKeys[name] ? "등록됨 · 바꾸려면 새 키 입력" : "미등록";
+    $(inputId).disabled = !writable;
+    if (writable) $(inputId).placeholder = hasKeys[name] ? "등록됨 · 바꾸려면 새 키 입력" : "미등록";
+    else $(inputId).placeholder = hasKeys[name] ? "등록됨 (Vercel 환경변수)" : "미등록 · Vercel 환경변수에 등록해 주세요";
   }
 }
 
@@ -424,22 +460,14 @@ async function testConnection() {
   }
 }
 
-/** 서버에서 만든 PDF를 숨은 iframe에 띄워 브라우저 인쇄 창을 연다. 막히면 새 탭으로 연다. */
+/** 실제 크기(13.333 × 7.5인치) 슬라이드 3장을 인쇄 전용 영역에 그리고 브라우저 인쇄 창을 연다. */
 async function printReport() {
-  const response = await busy($("print"), "인쇄용 PDF 만드는 중…", () => api("/api/pdf", { method: "POST", body: { report: currentReport() } }));
-  if (!response) return;
-  const url = URL.createObjectURL(await response.blob());
-  document.querySelector(".print-frame")?.remove();
-  const frame = el("iframe", { className: "print-frame", src: url });
-  frame.addEventListener("load", () => {
-    try {
-      frame.contentWindow.focus();
-      frame.contentWindow.print();
-    } catch {
-      window.open(url, "_blank");
-    }
-  });
-  document.body.append(frame);
+  const area = $("printArea");
+  area.replaceChildren(...reportSlides());
+  setStatus("인쇄 준비 중…");
+  await Promise.all([whenImagesLoaded(area), document.fonts.ready]);
+  setStatus("");
+  window.print();
 }
 
 async function init() {
@@ -465,10 +493,8 @@ async function init() {
     fillInput(state.meta.example);
     showReport(structuredClone(state.meta.example));
   });
-  if (!state.meta.previewAvailable) {
-    $("preview").title = "LibreOffice가 없어 미리보기를 쓸 수 없습니다.";
-    $("print").title = "LibreOffice가 없어 인쇄용 PDF를 만들 수 없습니다.";
-  }
+  $("sections").addEventListener("input", refreshPreviewSoon);
+  window.addEventListener("resize", refreshPreviewSoon);
 }
 
 init().catch((error) => setStatus(`초기화 실패: ${error.message}`, { error: true }));
