@@ -88,11 +88,24 @@ async function unsplashKey() {
   return (await store.loadSettings()).unsplashKey || process.env.UNSPLASH_ACCESS_KEY || "";
 }
 
+/** 호스팅에서는 설정 창으로 키를 넣을 수 없으므로, 키가 없다는 안내를 환경변수 쪽으로 돌린다. */
+function explainMissingKey(error) {
+  if (error?.code !== "missing-key" || store.keysWritable) return error;
+  const [head] = String(error.message).split(". ");
+  return Object.assign(new Error(`${head}. Vercel 환경변수 ANTHROPIC_API_KEY 또는 OPENAI_API_KEY에 등록해 주세요.`), { code: "missing-key", status: 400 });
+}
+
 async function completer() {
   const settings = await store.loadSettings();
   const { provider } = publicSettings(settings);
   const keys = { anthropic: settings.anthropicKey, openai: settings.openaiKey };
-  return (prompt) => completeWithAi({ provider, model: settings.model, prompt, keys });
+  return async (prompt) => {
+    try {
+      return await completeWithAi({ provider, model: settings.model, prompt, keys });
+    } catch (error) {
+      throw explainMissingKey(error);
+    }
+  };
 }
 
 /** 고른 후보를 내려받아 2:1로 저장한다. Unsplash 사진은 약관에 따라 다운로드 이벤트도 보낸다. */

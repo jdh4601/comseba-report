@@ -22,7 +22,6 @@ npm start     # http://127.0.0.1:4180
   - Claude는 Sonnet(기본)·Haiku·Opus 중에서 고릅니다. OpenAI는 모델 이름을 직접 입력하고, 비우면 `gpt-5.4`를 씁니다.
 - (권장) Unsplash Access Key: **⚙ 설정**에 한 번 입력하면 `data/settings.json`(git 제외)에 저장됩니다.
   없으면 Wikimedia Commons 사진을 씁니다. 환경변수 `UNSPLASH_ACCESS_KEY`도 인식합니다.
-- 미리보기: LibreOffice (`brew install --cask libreoffice`), poppler(`pdftoppm`)
 - PowerPoint for Mac: 탐구활동의 바탕(Batang) 글꼴이 PowerPoint 안에 들어 있습니다.
 
 ## 사용 흐름
@@ -33,10 +32,34 @@ npm start     # http://127.0.0.1:4180
    사진은 후보들의 설명을 AI가 비교해 사진 설명에 가장 맞는 것을 고릅니다.
 3. 칸별로 고치거나 섹션별 **다시 생성**, 사진은 **사진 검색**/**직접 올리기**로 바꿉니다.
 4. **미리보기**로 확인하고 **PPTX 다운로드** → PowerPoint에서 PDF로 내보냅니다.
-   바로 출력할 때는 **인쇄**(LibreOffice로 만든 PDF를 브라우저 인쇄 창으로 엽니다).
+   바로 출력할 때는 **인쇄**(브라우저에서 슬라이드를 실제 크기로 그려 인쇄 창을 엽니다).
 
-미리보기·인쇄는 LibreOffice 렌더링이라 문장부호 앞에 공백이 보일 수 있지만, PPTX에는 없습니다.
-학부모님께 드리는 최종본은 PPTX를 PowerPoint에서 PDF로 내보내는 편이 가장 깔끔합니다.
+미리보기·인쇄는 브라우저가 직접 그리므로 예전처럼 문장부호 앞에 공백이 생기지 않습니다.
+다만 글꼴이 달라 줄바꿈 위치가 PowerPoint와 조금 다를 수 있어, 최종본은 PPTX를 PowerPoint에서 PDF로 내보내는 편이 가장 정확합니다.
+
+## Vercel 배포본
+
+주소: https://comseba-report.vercel.app (아이디·비밀번호로 보호)
+
+로컬 실행과 다른 점은 다음과 같습니다.
+
+| 항목 | 로컬 | Vercel |
+|---|---|---|
+| AI 연결 | Claude/Codex CLI, Claude/OpenAI API | Claude API, OpenAI API만 (서버에 CLI가 없음) |
+| API 키 | 설정 창에서 입력 → `data/settings.json` | 환경변수만: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `UNSPLASH_ACCESS_KEY` |
+| 보고서·사진 저장 | `data/` 폴더 | Vercel Blob 비공개 저장소 |
+| 미리보기·인쇄 | 브라우저에서 그림 | 같음 (LibreOffice 필요 없음) |
+| 접속 보호 | 없음(내 컴퓨터) | `DASHBOARD_USER`, `DASHBOARD_PASSWORD`로 로그인 |
+
+환경변수를 바꿀 때는 다음처럼 등록한 뒤 다시 배포합니다.
+
+```bash
+printf 'sk-ant-...' | vercel env add ANTHROPIC_API_KEY production --sensitive
+vercel deploy --prod
+```
+
+`DASHBOARD_PASSWORD`가 없으면 화면은 503으로 닫힙니다(공개 상태로 열리지 않습니다).
+학생 자료는 `.vercelignore`로 배포 대상에서 제외하므로, 로컬 `data/` 내용은 올라가지 않습니다.
 
 ## 구조
 
@@ -50,9 +73,23 @@ npm start     # http://127.0.0.1:4180
 | `lib/ai.mjs` | Claude/Codex CLI, Claude API(SDK), OpenAI API 호출과 모델 목록 |
 | `lib/photos.mjs` | Unsplash/Wikimedia 사진 검색, AI 사진 선택 프롬프트, 2:1 자르기 |
 | `lib/template.mjs` | pptxgenjs 3페이지 템플릿 (한글 charset 보정 포함) |
-| `lib/preview.mjs` | LibreOffice로 인쇄용 PDF와 2·3페이지 PNG 미리보기 |
-| `server.mjs` | Express API, `public/` 화면 |
-| `data/` | 학생별 보고서 JSON, 사진, 설정·API 키 (git 제외) |
+| `public/shared/layout.mjs` | PPTX와 브라우저가 함께 쓰는 3페이지 배치 정의 |
+| `public/slides.mjs` | 공통 배치를 브라우저에서 그리는 미리보기·인쇄 렌더러 |
+| `server.mjs` | Express API, `public/` 화면, 환경에 맞는 저장소·provider 선택 |
+| `lib/auth.mjs`, `middleware.js` | 비밀번호 보호(Express + Vercel 라우팅 미들웨어) |
+| `lib/pptxgen.cjs` | pptxgenjs를 CommonJS로 불러오는 얇은 껍데기 (Vercel 호환) |
+| `lib/embedded-assets.mjs` | 로고·예시 사진을 base64로 담은 자동 생성 파일 |
+| `data/` | 로컬 실행용 보고서 JSON, 사진, 설정·API 키 (git·배포 제외) |
+
+### 내장 이미지 다시 만들기
+
+`assets/`의 로고나 예시 사진을 바꾸면 다음을 실행해 `lib/embedded-assets.mjs`를 다시 만듭니다.
+
+```bash
+node -e 'const fs=require("fs");const files={"assets/logo.png":"image/png","assets/photo_lunch.jpg":"image/jpeg","assets/photo_bin.jpg":"image/jpeg"};let out="export const EMBEDDED_ASSETS = {\n";for(const [f,t] of Object.entries(files))out+=`  ${JSON.stringify(f)}: { type: ${JSON.stringify(t)}, base64: ${JSON.stringify(fs.readFileSync(f).toString("base64"))} },\n`;out+="};\n";fs.writeFileSync("lib/embedded-assets.mjs",out)'
+```
+
+슬라이드 배치는 `public/shared/layout.mjs` 한 곳에서만 고칩니다. PPTX와 브라우저 미리보기·인쇄가 이 파일을 함께 씁니다.
 
 글자 수 상한이나 레이아웃을 바꿀 때는 `lib/schema.mjs`와 `lib/template.mjs`를 함께 고칩니다.
 
