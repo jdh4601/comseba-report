@@ -3,3 +3,5 @@ data/students/
 data/photos/
 data/settings.json
 .DS_Store
+.vercel
+.env*
