@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 
 import express from "express";
 
-import { PROVIDERS, complete as completeWithAi } from "./lib/ai.mjs";
+import { PROVIDERS, complete as completeWithAi, detectCliProvider } from "./lib/ai.mjs";
 import { checkBasicAuth } from "./lib/auth.mjs";
 import { EMBEDDED_ASSETS } from "./lib/embedded-assets.mjs";
 import { exampleReport } from "./lib/example.mjs";
@@ -31,7 +31,7 @@ const rootDir = dirname(fileURLToPath(import.meta.url));
  * API 키는 Vercel 환경변수(ANTHROPIC_API_KEY 등)로만 받는다.
  */
 const IS_HOSTED = Boolean(process.env.VERCEL);
-const store = IS_HOSTED ? createBlobStore() : createFileStore(join(rootDir, "data"));
+const store = IS_HOSTED ? createBlobStore() : createFileStore(join(rootDir, "data"), { defaultProvider: detectCliProvider() });
 const AVAILABLE_PROVIDERS = Object.fromEntries(Object.entries(PROVIDERS).filter(([, spec]) => !IS_HOSTED || spec.kind === "api"));
 const AUTH = { user: process.env.DASHBOARD_USER || "comseba", password: process.env.DASHBOARD_PASSWORD || "" };
 
