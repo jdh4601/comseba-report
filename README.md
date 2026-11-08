@@ -7,7 +7,37 @@
 - 2페이지(문제 정의·해결 아이디어)와 3페이지(진로탐구활동)는 AI가 학생에 맞춰 작성합니다.
 - **API 키가 없어도 됩니다.** 선생님 컴퓨터에 로그인된 Claude Code 또는 Codex를 그대로 사용합니다.
 
-## 처음 한 번만 하는 준비
+## 가장 쉬운 설치: AI에게 붙여넣기
+
+코딩을 몰라도 됩니다. **Claude Code** 또는 **Codex**에 아래 글을 그대로 붙여넣으면, AI가 설치부터 실행까지 알아서 진행합니다.
+Claude 데스크톱 앱의 Code 탭, Codex 앱, 터미널의 `claude`·`codex` 어디에 붙여넣어도 됩니다.
+
+1. 아래 회색 상자 오른쪽 위의 복사 버튼을 누릅니다.
+2. Claude Code 또는 Codex 대화창에 붙여넣고 보냅니다.
+3. AI가 명령을 실행해도 되는지 물으면 허락합니다. 1분 정도 뒤에 브라우저에 보고서 생성기가 열립니다.
+
+```text
+컴세바 보고서 생성기(https://github.com/jdh4601/comseba-report)를 내 컴퓨터에 설치하고 실행해 줘. 나는 코딩을 전혀 모르니까, 필요한 일은 네가 직접 하고 결과만 쉬운 말로 알려 줘.
+
+0. 이 프로그램은 터미널의 `claude` 또는 `codex` 명령으로 AI를 부른다. 터미널에서 둘 중 하나라도 실행되는지 확인해. 둘 다 없으면 `curl -fsSL https://claude.ai/install.sh | bash`로 Claude Code를 설치해. 설치한 뒤 로그인이 필요하면, 내가 터미널 앱을 열고 `claude`를 입력해서 로그인하는 방법을 알려 주고, 내가 끝냈다고 하면 이어서 진행해.
+1. Node.js 20 이상이 있는지 확인해. 없으면 설치해 줘. Mac에 Homebrew가 있으면 `brew install node`를 쓰고, 없으면 https://nodejs.org 의 LTS 설치 파일을 받아 설치해. 비밀번호 입력처럼 내가 직접 해야 하는 일이 있으면 무엇을 하면 되는지 한 단계씩 알려 줘.
+2. 홈 폴더에 `comseba-report` 폴더가 없으면 `git clone https://github.com/jdh4601/comseba-report.git ~/comseba-report`로 받아. git이 없으면 https://github.com/jdh4601/comseba-report/archive/refs/heads/main.zip 을 받아서 `~/comseba-report`에 풀어. 폴더가 이미 있으면 `git pull`로 최신 버전으로 바꿔.
+3. `~/comseba-report`에서 `npm install`을 실행해.
+4. `npm start`를 백그라운드로 실행해서 서버를 켜. 4180 포트를 이미 다른 프로그램이 쓰고 있으면 `PORT=4181 npm start`처럼 빈 포트를 써.
+5. `curl -X POST http://127.0.0.1:4180/api/test-connection`(포트를 바꿨으면 그 포트)으로 AI 연결을 확인해. `"ok":true`가 나와야 성공이야. 실패하면 오류 문구를 읽고 원인을 고쳐 줘(예: claude나 codex에 로그인되어 있지 않음).
+6. 브라우저에서 http://127.0.0.1:4180 을 열어 줘.
+7. 마지막에 다음 내용을 쉬운 말로 짧게 알려 줘. 터미널 명령어는 보여 주지 마.
+   - 설치된 폴더 위치
+   - 다음부터 실행하는 방법: Finder에서 홈 폴더의 `comseba-report` 폴더를 열고 `보고서 생성기 시작.command`를 더블클릭한다. 이미 켜져 있으면 브라우저만 열린다.
+   - 지금 켜 둔 프로그램은 컴퓨터를 끄거나 다시 시작하면 함께 꺼진다는 점
+
+API 키는 필요 없어. 이 컴퓨터에 로그인된 Claude Code 또는 Codex를 그대로 써.
+```
+
+설치가 끝난 뒤에는 Finder에서 홈 폴더의 `comseba-report` 폴더를 열고 `보고서 생성기 시작.command`를 더블클릭하면 실행됩니다.
+AI에게 붙여넣기가 어렵거나 직접 설치하고 싶다면 아래 순서를 따릅니다.
+
+## 직접 설치하기 (처음 한 번만)
 
 ### 1. Node.js 설치
 
