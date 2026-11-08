@@ -95,6 +95,31 @@ function renderChips() {
   }
 }
 
+/** 학생이 학교에서 겪을 만한 문제 예시. 칩을 누르면 입력칸에 문장이 채워진다. */
+const PROBLEM_EXAMPLES = [
+  { label: "교실 온도", quote: "교실이 여름엔 너무 덥고 겨울엔 너무 추워서 수업에 집중이 안 돼요." },
+  { label: "매점 줄", quote: "쉬는 시간마다 매점 줄이 너무 길어서 사고 싶은 걸 못 사고 돌아와요." },
+  { label: "수행평가 마감", quote: "수행평가 마감일이 과목마다 달라서 자꾸 잊어버리고 놓쳐요." },
+  { label: "체육관 자리", quote: "체육관이랑 운동장 자리가 늘 부족해서 반끼리 맨날 다퉈요." },
+  { label: "분실물", quote: "분실물 보관함에 물건이 쌓여 있는데 주인을 찾기가 너무 어려워요." },
+];
+
+function renderProblemExamples() {
+  const chips = PROBLEM_EXAMPLES.map(({ label, quote }) =>
+    el("button", {
+      type: "button",
+      className: "chip",
+      textContent: label,
+      title: quote,
+      onclick: () => {
+        $("problemQuote").value = quote;
+        $("problemQuote").focus();
+      },
+    }),
+  );
+  $("problemExamples").replaceChildren(el("span", { className: "example-label", textContent: "예시" }), ...chips);
+}
+
 function renderLevels() {
   $("levelButtons").replaceChildren(
     ...state.meta.levels.map((level) => {
@@ -477,6 +502,7 @@ async function init() {
   state.level = state.meta.defaultLevel;
   renderLevels();
   renderChips();
+  renderProblemExamples();
   refreshSaved();
 
   $("openSettings").addEventListener("click", openSettings);

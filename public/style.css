@@ -48,6 +48,9 @@ input:focus, textarea:focus, select:focus { outline: 2px solid rgba(164, 15, 29,
 .chip.main { background: var(--red); border-color: var(--red); color: var(--white); font-weight: 700; }
 .chip.sub { background: var(--black); border-color: var(--black); color: var(--white); font-weight: 700; }
 .chip.taken { opacity: .35; }
+.example-chips { margin-top: 6px; align-items: center; }
+.example-chips .chip { padding: 4px 10px; font-size: 12px; }
+.example-label { font-size: 12px; color: var(--gray); margin-right: 2px; }
 .segmented { display: grid; grid-template-columns: repeat(3, 1fr); border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
 .segmented button { border: none; border-right: 1px solid var(--line); background: var(--white); color: var(--gray); padding: 8px 0; border-radius: 0; }
 .segmented button:last-child { border-right: none; }
