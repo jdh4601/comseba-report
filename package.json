@@ -2,6 +2,7 @@
   "name": "report-dashboard",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
   "description": "컴세바 60분 융합 체험수업 보고서(3페이지 PPTX) 자동 생성 로컬 대시보드",
   "type": "module",
   "scripts": {
